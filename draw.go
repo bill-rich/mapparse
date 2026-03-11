@@ -126,6 +126,31 @@ var (
 	colorWhite  = color.NRGBA{R: 255, G: 255, B: 255, A: 255}
 )
 
+// techGlyph maps tech building template names to single-letter markers.
+var techGlyph = map[string]string{
+	"TechArtilleryPlatform": "A",
+	"TechReinforcementPad":  "R",
+	"TechRepairPad":         "P",
+	"TechRepairbay":         "B",
+	"TechHospital":          "H",
+	"TechOilDerrick":        "D",
+	"TechOilRefinery":       "O",
+}
+
+// techLegend lists entries in display order for the legend.
+var techLegend = []struct {
+	Letter string
+	Label  string
+}{
+	{"A", "Artillery Platform"},
+	{"B", "Repair Bay"},
+	{"D", "Oil Derrick"},
+	{"H", "Hospital"},
+	{"O", "Oil Refinery"},
+	{"P", "Repair Pad"},
+	{"R", "Reinforcement Pad"},
+}
+
 type playerAssignment struct {
 	Name       string
 	Team       int // 1 or 2
@@ -153,10 +178,16 @@ func annotateMap(img *image.NRGBA, md *MapData, assignments []playerAssignment, 
 		drawBitmapStringCentered(img, px, py-7*fontScale/2, "$", colorGold)
 	}
 
-	// Draw tech markers
+	// Draw tech markers with per-type letters
+	usedTechTypes := make(map[string]bool)
 	for _, t := range tech {
 		px, py := worldToPixel(float64(t.X), float64(t.Y), md.ExtentX, md.ExtentY, imgW, imgH)
-		drawBitmapStringCentered(img, px, py-7*fontScale/2, "T", colorPurple)
+		glyph := techGlyph[t.Name]
+		if glyph == "" {
+			glyph = "T"
+		}
+		usedTechTypes[t.Name] = true
+		drawBitmapStringCentered(img, px, py-7*fontScale/2, glyph, colorPurple)
 	}
 
 	// Collect and sort player starts
@@ -197,6 +228,75 @@ func annotateMap(img *image.NRGBA, md *MapData, assignments []playerAssignment, 
 		label := string(a.Faction.Major) + "/" + string(a.Faction.Sub)
 		drawBitmapStringCentered(img, px+1, factionY+1, label, colorBlack)
 		drawBitmapStringCentered(img, px, factionY, label, colorWhite)
+	}
+
+	// Draw legend in bottom-left corner
+	drawLegend(img, usedTechTypes)
+}
+
+// drawLegend renders a legend box in the bottom-left showing tech glyph meanings
+// and the supply $ marker. Only tech types present on the map are included.
+func drawLegend(img *image.NRGBA, usedTechTypes map[string]bool) {
+	lineH := 7*fontScale + 4 // glyph height + spacing
+	padding := 10
+
+	// Build legend entries: supply first, then tech types present on this map
+	type entry struct {
+		glyph string
+		label string
+		color color.NRGBA
+	}
+	var entries []entry
+	entries = append(entries, entry{"$", "Supply", colorGold})
+	for _, tl := range techLegend {
+		// Check if this tech type is on the map
+		found := false
+		for name := range usedTechTypes {
+			if techGlyph[name] == tl.Letter {
+				found = true
+				break
+			}
+		}
+		if found {
+			entries = append(entries, entry{tl.Letter, tl.Label, colorPurple})
+		}
+	}
+
+	if len(entries) == 0 {
+		return
+	}
+
+	// Measure widest line: "X - Label"
+	maxChars := 0
+	for _, e := range entries {
+		lineLen := len(e.glyph) + 3 + len(e.label) // "X - Label"
+		if lineLen > maxChars {
+			maxChars = lineLen
+		}
+	}
+
+	boxW := maxChars*6*fontScale + padding*2
+	boxH := len(entries)*lineH + padding*2
+	startX := padding
+	startY := img.Bounds().Dy() - boxH - padding
+
+	// Draw semi-transparent black background
+	bgColor := color.NRGBA{R: 0, G: 0, B: 0, A: 180}
+	for y := startY; y < startY+boxH; y++ {
+		for x := startX; x < startX+boxW; x++ {
+			if x >= 0 && x < img.Bounds().Dx() && y >= 0 && y < img.Bounds().Dy() {
+				img.SetNRGBA(x, y, bgColor)
+			}
+		}
+	}
+
+	// Draw entries
+	textX := startX + padding
+	textY := startY + padding
+	for _, e := range entries {
+		drawBitmapString(img, textX, textY, e.glyph, e.color)
+		drawBitmapString(img, textX+len(e.glyph)*6*fontScale, textY, " - "+e.label, colorWhite)
+		textY += lineH
 	}
 }
 
