@@ -16,7 +16,7 @@ type BlendTileData struct {
 	TextureClasses []TextureClass
 }
 
-func parseBlendTileData(chunk *Chunk) (*BlendTileData, error) {
+func parseBlendTileData(chunk *Chunk, gridW, gridH int32) (*BlendTileData, error) {
 	r := NewBinReader(chunk.Data)
 
 	dataSize, err := r.ReadInt32()
@@ -55,10 +55,12 @@ func parseBlendTileData(chunk *Chunk) (*BlendTileData, error) {
 		}
 	}
 
-	// Version >= 7: cell cliff state bit flags
-	// Each cell uses 1 bit, packed into bytes. Total = ceil(dataSize / 8).
+	// Version >= 7: cell cliff state bit flags.
+	// Stored as 1 bit per cell, packed per-row with each row padded to a byte boundary.
+	// Total bytes = ceil(width / 8) * height.
 	if chunk.Version >= 7 {
-		flagBytes := (int(dataSize) + 7) / 8
+		bytesPerRow := (int(gridW) + 7) / 8
+		flagBytes := bytesPerRow * int(gridH)
 		if err := r.Skip(flagBytes); err != nil {
 			return nil, fmt.Errorf("skip cliff flags: %w", err)
 		}
@@ -85,6 +87,9 @@ func parseBlendTileData(chunk *Chunk) (*BlendTileData, error) {
 	numTC, err := r.ReadInt32()
 	if err != nil {
 		return nil, fmt.Errorf("numTextureClasses: %w", err)
+	}
+	if numTC < 0 {
+		return nil, fmt.Errorf("invalid numTextureClasses: %d", numTC)
 	}
 
 	bt.TextureClasses = make([]TextureClass, numTC)
@@ -122,7 +127,6 @@ func parseBlendTileData(chunk *Chunk) (*BlendTileData, error) {
 }
 
 // cellTerrainName returns the terrain type name for the cell at grid coordinates (x, y).
-// width must be set on BlendTileData before calling.
 func (bt *BlendTileData) cellTerrainName(x, y int) string {
 	ndx := y*int(bt.NumCellsX) + x
 	if ndx < 0 || ndx >= len(bt.TileIndices) {

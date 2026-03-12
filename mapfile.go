@@ -57,7 +57,7 @@ func ParseMap(filename string) (*MapData, error) {
 				return nil, fmt.Errorf("HeightMapData: %w", err)
 			}
 		case "BlendTileData":
-			bt, err := parseBlendTileData(chunk)
+			bt, err := parseBlendTileData(chunk, md.Width, md.Height)
 			if err != nil {
 				return nil, fmt.Errorf("BlendTileData: %w", err)
 			}

@@ -17,6 +17,7 @@ func runRender(args []string) error {
 	outPath := fs.String("out", "", "Output PNG path (default: <mapname>_terrain.png)")
 	scale := fs.Int("scale", 1, "Pixels per grid cell")
 	noShading := fs.Bool("no-shading", false, "Disable height shading")
+	texturesDir := fs.String("textures", "", "Path to Terrain directory with TGA files and Terrain.ini")
 	fs.Parse(args)
 
 	if *mapPath == "" {
@@ -48,6 +49,17 @@ func runRender(args []string) error {
 	md.BlendTile.NumCellsX = md.Width
 	md.BlendTile.NumCellsY = md.Height
 
+	// Load texture atlas cache if textures dir provided
+	var texCache *textureCache
+	if *texturesDir != "" {
+		iniPath := filepath.Join(*texturesDir, "Terrain.ini")
+		ini, err := parseTerrainINI(iniPath)
+		if err != nil {
+			return fmt.Errorf("parse Terrain.ini: %w", err)
+		}
+		texCache = newTextureCache(*texturesDir, ini)
+	}
+
 	playW := int(md.Width - 2*md.BorderSize)
 	playH := int(md.Height - 2*md.BorderSize)
 	if playW <= 0 || playH <= 0 {
@@ -59,12 +71,12 @@ func runRender(args []string) error {
 
 	// Compute min/max height across the playable area
 	border := int(md.BorderSize)
-	width := int(md.Width)
+	gridW := int(md.Width)
 	var minH, maxH byte
 	minH = 255
 	for py := 0; py < playH; py++ {
 		for px := 0; px < playW; px++ {
-			idx := (py+border)*width + (px + border)
+			idx := (py+border)*gridW + (px + border)
 			if idx < len(md.Heights) {
 				h := md.Heights[idx]
 				if h < minH {
@@ -81,33 +93,33 @@ func runRender(args []string) error {
 
 	for py := 0; py < playH; py++ {
 		for px := 0; px < playW; px++ {
-			name := md.BlendTile.cellTerrainName(px+border, py+border)
-			base := terrainColor(name)
+			cellX := px + border
+			cellY := py + border
 
-			var c color.RGBA
-			if *noShading || maxH == minH {
-				c = base
-			} else {
-				idx := (py+border)*width + (px + border)
+			// Height shading factor
+			heightIdx := cellY*gridW + cellX
+			var shade float64 = 1.0
+			if !*noShading && maxH != minH {
 				var h byte
-				if idx < len(md.Heights) {
-					h = md.Heights[idx]
+				if heightIdx < len(md.Heights) {
+					h = md.Heights[heightIdx]
 				}
 				t := float64(h-minH) / float64(maxH-minH)
-				shade := 0.7 + 0.6*t
-				c = color.RGBA{
-					R: clampByte(float64(base.R) * shade),
-					G: clampByte(float64(base.G) * shade),
-					B: clampByte(float64(base.B) * shade),
-					A: 255,
-				}
+				shade = 0.7 + 0.6*t
 			}
 
-			// Fill scale x scale block
-			for sy := 0; sy < *scale; sy++ {
-				for sx := 0; sx < *scale; sx++ {
-					img.SetNRGBA(px**scale+sx, py**scale+sy, color.NRGBA{c.R, c.G, c.B, c.A})
-				}
+			// Try texture atlas sampling
+			var textured bool
+			if texCache != nil {
+				textured = renderCellFromAtlas(img, md.BlendTile, texCache, cellX, cellY, px, py, *scale, shade)
+			}
+
+			if !textured {
+				// Fallback to color palette
+				name := md.BlendTile.cellTerrainName(cellX, cellY)
+				base := terrainColor(name)
+				c := applyShade(base, shade)
+				fillBlock(img, px**scale, py**scale, *scale, c)
 			}
 		}
 	}
@@ -124,6 +136,75 @@ func runRender(args []string) error {
 
 	fmt.Printf("Rendered %d x %d terrain image to %s\n", imgW, imgH, *outPath)
 	return nil
+}
+
+// renderCellFromAtlas tries to render a cell using texture atlas data.
+// Returns false if the atlas is not available for this cell's texture class.
+func renderCellFromAtlas(img *image.NRGBA, bt *BlendTileData, cache *textureCache,
+	cellX, cellY, px, py, scale int, shade float64) bool {
+
+	ndx := cellY*int(bt.NumCellsX) + cellX
+	if ndx < 0 || ndx >= len(bt.TileIndices) {
+		return false
+	}
+	rawIndex := bt.TileIndices[ndx]
+	tileNum := int(rawIndex) >> 2
+
+	// Find the texture class for this tile
+	var tc *TextureClass
+	for i := range bt.TextureClasses {
+		c := &bt.TextureClasses[i]
+		if tileNum >= int(c.FirstTile) && tileNum < int(c.FirstTile+c.NumTiles) {
+			tc = c
+			break
+		}
+	}
+	if tc == nil {
+		return false
+	}
+
+	atlas := cache.get(tc.Name, tc.Width)
+	if atlas == nil {
+		return false
+	}
+
+	pixels := atlas.sampleCell(rawIndex, tc.FirstTile, tc.Width, scale)
+	outX := px * scale
+	outY := py * scale
+	for sy := 0; sy < scale; sy++ {
+		for sx := 0; sx < scale; sx++ {
+			p := pixels[sy*scale+sx]
+			c := applyShadeNRGBA(p, shade)
+			img.SetNRGBA(outX+sx, outY+sy, c)
+		}
+	}
+	return true
+}
+
+func applyShade(base color.RGBA, shade float64) color.NRGBA {
+	return color.NRGBA{
+		R: clampByte(float64(base.R) * shade),
+		G: clampByte(float64(base.G) * shade),
+		B: clampByte(float64(base.B) * shade),
+		A: 255,
+	}
+}
+
+func applyShadeNRGBA(p color.NRGBA, shade float64) color.NRGBA {
+	return color.NRGBA{
+		R: clampByte(float64(p.R) * shade),
+		G: clampByte(float64(p.G) * shade),
+		B: clampByte(float64(p.B) * shade),
+		A: p.A,
+	}
+}
+
+func fillBlock(img *image.NRGBA, x, y, size int, c color.NRGBA) {
+	for sy := 0; sy < size; sy++ {
+		for sx := 0; sx < size; sx++ {
+			img.SetNRGBA(x+sx, y+sy, c)
+		}
+	}
 }
 
 func clampByte(v float64) uint8 {
