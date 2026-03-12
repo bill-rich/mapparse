@@ -169,6 +169,9 @@ func renderCellFromAtlas(img *image.NRGBA, bt *BlendTileData, cache *textureCach
 	}
 
 	pixels := atlas.sampleCell(rawIndex, tc.FirstTile, tc.Width, scale)
+	if pixels == nil {
+		return false
+	}
 	outX := px * scale
 	outY := py * scale
 	for sy := 0; sy < scale; sy++ {
@@ -195,7 +198,7 @@ func applyShadeNRGBA(p color.NRGBA, shade float64) color.NRGBA {
 		R: clampByte(float64(p.R) * shade),
 		G: clampByte(float64(p.G) * shade),
 		B: clampByte(float64(p.B) * shade),
-		A: p.A,
+		A: 255,
 	}
 }
 

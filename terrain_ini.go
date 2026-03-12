@@ -134,18 +134,25 @@ func (tc *textureCache) findFile(name string) string {
 	return ""
 }
 
-// sampleCell returns the color for a cell from the tile atlas.
-// rawIndex is the raw tile index from BlendTileData, tc is the texture class.
+// sampleCell returns the colors for a cell from the tile atlas.
+// rawIndex is the raw tile index from BlendTileData.
+// Returns nil if the tile coordinates are out of bounds.
 func (a *textureAtlas) sampleCell(rawIndex int16, classFirstTile int32, classWidth int32, scale int) []color.NRGBA {
 	tileNum := int(rawIndex) >> 2
 	subCell := int(rawIndex) & 3
 
 	localTile := tileNum - int(classFirstTile)
+	if localTile < 0 {
+		return nil
+	}
 	tileCol := localTile % int(classWidth)
 	tileRow := localTile / int(classWidth)
 
 	tw := a.tileWidth
 	halfTile := tw / 2
+	if halfTile == 0 {
+		return nil
+	}
 
 	// Sub-cell quadrant within the tile
 	subX := (subCell & 1) * halfTile
@@ -155,19 +162,24 @@ func (a *textureAtlas) sampleCell(rawIndex int16, classFirstTile int32, classWid
 	atlasX := tileCol*tw + subX
 	atlasY := tileRow*tw + subY
 
+	// Bounds check against atlas image
+	bounds := a.img.Bounds()
+	if atlasX+halfTile > bounds.Max.X || atlasY+halfTile > bounds.Max.Y {
+		return nil
+	}
+
 	// Sample scale×scale pixels from the halfTile×halfTile quadrant
 	pixels := make([]color.NRGBA, scale*scale)
 	for sy := 0; sy < scale; sy++ {
 		for sx := 0; sx < scale; sx++ {
-			// Map output pixel to source quadrant pixel
 			srcX := atlasX + sx*halfTile/scale
 			srcY := atlasY + sy*halfTile/scale
-			r, g, b, aa := a.img.At(srcX, srcY).RGBA()
+			r, g, b, _ := a.img.At(srcX, srcY).RGBA()
 			pixels[sy*scale+sx] = color.NRGBA{
 				R: uint8(r >> 8),
 				G: uint8(g >> 8),
 				B: uint8(b >> 8),
-				A: uint8(aa >> 8),
+				A: 255,
 			}
 		}
 	}
