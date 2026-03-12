@@ -17,6 +17,14 @@ func main() {
 		return
 	}
 
+	if len(os.Args) > 1 && os.Args[1] == "render" {
+		if err := runRender(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	dump := flag.Bool("dump", false, "Dump ALL objects (for discovering template names)")
 	jsonOut := flag.Bool("json", false, "Output as JSON")
 	verbose := flag.Bool("verbose", false, "Include unclassified objects")

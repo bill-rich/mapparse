@@ -113,6 +113,23 @@ func NewBinReader(data []byte) *BinReader {
 
 func (r *BinReader) Remaining() int { return len(r.data) - r.pos }
 
+func (r *BinReader) ReadInt16() (int16, error) {
+	if r.pos+2 > len(r.data) {
+		return 0, errors.New("binreader: read past end")
+	}
+	v := int16(binary.LittleEndian.Uint16(r.data[r.pos:]))
+	r.pos += 2
+	return v, nil
+}
+
+func (r *BinReader) Skip(n int) error {
+	if r.pos+n > len(r.data) {
+		return fmt.Errorf("binreader: skip %d bytes past end", n)
+	}
+	r.pos += n
+	return nil
+}
+
 func (r *BinReader) ReadByte() (byte, error) {
 	if r.pos+1 > len(r.data) {
 		return 0, errors.New("binreader: read past end")

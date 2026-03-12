@@ -15,6 +15,8 @@ type MapData struct {
 	ExtentX    float64 // world-space width
 	ExtentY    float64 // world-space height
 	Objects    []*MapObject
+	Heights    []byte          // raw height values per grid cell
+	BlendTile  *BlendTileData  // parsed blend tile data (nil if chunk absent)
 }
 
 // ParseMap reads and parses a C&C Generals .map file.
@@ -54,12 +56,17 @@ func ParseMap(filename string) (*MapData, error) {
 			if err := parseHeightMap(chunk, md); err != nil {
 				return nil, fmt.Errorf("HeightMapData: %w", err)
 			}
+		case "BlendTileData":
+			bt, err := parseBlendTileData(chunk)
+			if err != nil {
+				return nil, fmt.Errorf("BlendTileData: %w", err)
+			}
+			md.BlendTile = bt
 		case "ObjectsList":
 			if err := parseObjectsList(chunk, tbl, md); err != nil {
 				return nil, fmt.Errorf("ObjectsList: %w", err)
 			}
 		}
-		// Skip BlendTileData, GlobalLighting, WorldInfo, etc.
 	}
 
 	// Compute map extent
@@ -100,15 +107,22 @@ func parseHeightMap(chunk *Chunk, md *MapData) error {
 			return fmt.Errorf("numBorders: %w", err)
 		}
 		// Skip boundary data: numBorders * 2 * int32
-		for i := int32(0); i < numBorders; i++ {
-			if _, err := r.ReadInt32(); err != nil {
-				return fmt.Errorf("boundary x: %w", err)
-			}
-			if _, err := r.ReadInt32(); err != nil {
-				return fmt.Errorf("boundary y: %w", err)
-			}
+		if err := r.Skip(int(numBorders) * 8); err != nil {
+			return fmt.Errorf("boundary data: %w", err)
 		}
 	}
+
+	// Read height data
+	dataSize, err := r.ReadInt32()
+	if err != nil {
+		return fmt.Errorf("height dataSize: %w", err)
+	}
+	if int(dataSize) > r.Remaining() {
+		return fmt.Errorf("height data truncated: want %d, have %d", dataSize, r.Remaining())
+	}
+	md.Heights = make([]byte, dataSize)
+	copy(md.Heights, r.data[r.pos:r.pos+int(dataSize)])
+	r.pos += int(dataSize)
 
 	return nil
 }
