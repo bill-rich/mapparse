@@ -45,14 +45,18 @@ type jsonOutput struct {
 }
 
 type extent struct {
-	Width  float64 `json:"width"`
-	Height float64 `json:"height"`
+	Width      float64 `json:"width"`
+	Height     float64 `json:"height"`
+	GridWidth  int32   `json:"grid_width"`
+	GridHeight int32   `json:"grid_height"`
+	BorderSize int32   `json:"border_size"`
 }
 
 type jsonPosition struct {
-	Name string  `json:"name,omitempty"`
-	X    float32 `json:"x"`
-	Y    float32 `json:"y"`
+	Name         string  `json:"name,omitempty"`
+	PlayerNumber int     `json:"player_number,omitempty"`
+	X            float32 `json:"x"`
+	Y            float32 `json:"y"`
 }
 
 type jsonWaypoint struct {
@@ -103,10 +107,16 @@ func outputSummary(md *MapData, asJSON bool, verbose bool) {
 
 	if asJSON {
 		out := jsonOutput{
-			Extent: extent{Width: md.ExtentX, Height: md.ExtentY},
+			Extent: extent{
+				Width:      md.ExtentX,
+				Height:     md.ExtentY,
+				GridWidth:  md.Width,
+				GridHeight: md.Height,
+				BorderSize: md.BorderSize,
+			},
 		}
 		for _, s := range starts {
-			out.PlayerStarts = append(out.PlayerStarts, jsonPosition{X: s.X, Y: s.Y})
+			out.PlayerStarts = append(out.PlayerStarts, jsonPosition{PlayerNumber: s.PlayerNumber, X: s.X, Y: s.Y})
 		}
 		for _, s := range supply {
 			out.Supply = append(out.Supply, jsonPosition{Name: s.Name, X: s.X, Y: s.Y})
