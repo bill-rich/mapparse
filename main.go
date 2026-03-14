@@ -50,8 +50,9 @@ type extent struct {
 }
 
 type jsonPosition struct {
-	X float32 `json:"x"`
-	Y float32 `json:"y"`
+	Name string  `json:"name,omitempty"`
+	X    float32 `json:"x"`
+	Y    float32 `json:"y"`
 }
 
 type jsonWaypoint struct {
@@ -108,10 +109,10 @@ func outputSummary(md *MapData, asJSON bool, verbose bool) {
 			out.PlayerStarts = append(out.PlayerStarts, jsonPosition{X: s.X, Y: s.Y})
 		}
 		for _, s := range supply {
-			out.Supply = append(out.Supply, jsonPosition{X: s.X, Y: s.Y})
+			out.Supply = append(out.Supply, jsonPosition{Name: s.Name, X: s.X, Y: s.Y})
 		}
 		for _, s := range tech {
-			out.Tech = append(out.Tech, jsonPosition{X: s.X, Y: s.Y})
+			out.Tech = append(out.Tech, jsonPosition{Name: s.Name, X: s.X, Y: s.Y})
 		}
 		for _, w := range waypoints {
 			out.Waypoints = append(out.Waypoints, jsonWaypoint{Name: w.WaypointName, X: w.X, Y: w.Y})
