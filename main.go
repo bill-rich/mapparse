@@ -40,6 +40,7 @@ type jsonOutput struct {
 	PlayerStarts []jsonPosition    `json:"player_starts"`
 	Supply       []jsonPosition    `json:"supply"`
 	Tech         []jsonPosition    `json:"tech"`
+	Garrison     []jsonPosition    `json:"garrison"`
 	Waypoints    []jsonWaypoint    `json:"waypoints,omitempty"`
 	Other        []jsonObject      `json:"other,omitempty"`
 }
@@ -85,6 +86,7 @@ func outputSummary(md *MapData, asJSON bool, verbose bool) {
 	var starts []*MapObject
 	var supply []*MapObject
 	var tech []*MapObject
+	var garrison []*MapObject
 	var waypoints []*MapObject
 	var other []*MapObject
 
@@ -96,6 +98,8 @@ func outputSummary(md *MapData, asJSON bool, verbose bool) {
 			supply = append(supply, obj)
 		case KindTech:
 			tech = append(tech, obj)
+		case KindGarrison:
+			garrison = append(garrison, obj)
 		case KindWaypoint:
 			waypoints = append(waypoints, obj)
 		default:
@@ -123,6 +127,9 @@ func outputSummary(md *MapData, asJSON bool, verbose bool) {
 		}
 		for _, s := range tech {
 			out.Tech = append(out.Tech, jsonPosition{Name: s.Name, X: s.X, Y: s.Y})
+		}
+		for _, g := range garrison {
+			out.Garrison = append(out.Garrison, jsonPosition{Name: g.Name, X: g.X, Y: g.Y})
 		}
 		for _, w := range waypoints {
 			out.Waypoints = append(out.Waypoints, jsonWaypoint{Name: w.WaypointName, X: w.X, Y: w.Y})
@@ -158,6 +165,12 @@ func outputSummary(md *MapData, asJSON bool, verbose bool) {
 	fmt.Printf("Tech positions (%d):\n", len(tech))
 	for _, t := range tech {
 		fmt.Printf("  %s: (%.1f, %.1f)\n", t.Name, t.X, t.Y)
+	}
+	fmt.Println()
+
+	fmt.Printf("Garrisonable buildings (%d):\n", len(garrison))
+	for _, g := range garrison {
+		fmt.Printf("  %s: (%.1f, %.1f)\n", g.Name, g.X, g.Y)
 	}
 
 	if len(waypoints) > 0 {

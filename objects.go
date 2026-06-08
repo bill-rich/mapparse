@@ -14,6 +14,7 @@ const (
 	KindWaypoint
 	KindSupply
 	KindTech
+	KindGarrison
 )
 
 func (k ObjectKind) String() string {
@@ -26,6 +27,8 @@ func (k ObjectKind) String() string {
 		return "supply"
 	case KindTech:
 		return "tech"
+	case KindGarrison:
+		return "garrison"
 	default:
 		return "unclassified"
 	}
@@ -133,6 +136,10 @@ func classifyObject(obj *MapObject) {
 	}
 	if techNames[obj.Name] {
 		obj.Kind = KindTech
+		return
+	}
+	if garrisonNames[obj.Name] {
+		obj.Kind = KindGarrison
 		return
 	}
 }
