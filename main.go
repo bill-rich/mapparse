@@ -9,6 +9,14 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "worldinfo" {
+		if err := runWorldInfo(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	dump := flag.Bool("dump", false, "Dump ALL objects (for discovering template names)")
 	jsonOut := flag.Bool("json", false, "Output as JSON")
 	verbose := flag.Bool("verbose", false, "Include unclassified objects")
@@ -290,4 +298,38 @@ func dictValueStr(e DictEntry) string {
 	default:
 		return "?"
 	}
+}
+
+// runWorldInfo dumps the WorldInfo chunk's dict. Use Go's %q verb so any
+// non-printable bytes in the stored values (e.g. truncated nameLookupTag
+// strings that pick up garbage from the next field) show up explicitly.
+func runWorldInfo(args []string) error {
+	fs := flag.NewFlagSet("worldinfo", flag.ExitOnError)
+	asJSON := fs.Bool("json", false, "Output as JSON")
+	fs.Parse(args)
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: mapparse worldinfo [--json] <mapfile>")
+		os.Exit(1)
+	}
+	md, err := ParseMap(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		var entries []jsonDictEntry
+		for _, e := range md.WorldDict {
+			entries = append(entries, jsonDictEntry{
+				Key:   e.Key,
+				Type:  dictTypeName(e.Type),
+				Value: dictValue(e),
+			})
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(entries)
+	}
+	for _, e := range md.WorldDict {
+		fmt.Printf("%s = %s\n", e.Key, dictValueStr(e))
+	}
+	return nil
 }

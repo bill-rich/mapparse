@@ -15,6 +15,7 @@ type MapData struct {
 	ExtentX    float64 // world-space width
 	ExtentY    float64 // world-space height
 	Objects    []*MapObject
+	WorldDict  []DictEntry // entries from the WorldInfo chunk
 }
 
 // ParseMap reads and parses a C&C Generals .map file.
@@ -58,8 +59,12 @@ func ParseMap(filename string) (*MapData, error) {
 			if err := parseObjectsList(chunk, tbl, md); err != nil {
 				return nil, fmt.Errorf("ObjectsList: %w", err)
 			}
+		case "WorldInfo":
+			if err := parseWorldInfo(chunk, tbl, md); err != nil {
+				return nil, fmt.Errorf("WorldInfo: %w", err)
+			}
 		}
-		// Skip BlendTileData, GlobalLighting, WorldInfo, etc.
+		// Skip BlendTileData, GlobalLighting, etc.
 	}
 
 	// Compute map extent
@@ -135,5 +140,17 @@ func parseObjectsList(chunk *Chunk, tbl SymbolTable, md *MapData) error {
 		md.Objects = append(md.Objects, obj)
 	}
 
+	return nil
+}
+
+// parseWorldInfo extracts the worldDict from the WorldInfo chunk. The
+// chunk payload is a single Dict (see MapUtil.cpp:277, file.readDict()).
+func parseWorldInfo(chunk *Chunk, tbl SymbolTable, md *MapData) error {
+	r := NewBinReader(chunk.Data)
+	entries, err := r.ReadDict(tbl)
+	if err != nil {
+		return fmt.Errorf("dict: %w", err)
+	}
+	md.WorldDict = entries
 	return nil
 }
