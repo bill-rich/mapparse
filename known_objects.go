@@ -10,6 +10,32 @@ var supplyNames = map[string]bool{
 	"ToxinRepository": true,
 }
 
+// valuePerSupplyBox is GameData.ini's ValuePerSupplyBox (Zero Hour value).
+// The hardcoded engine default is 100; this project targets the inizh data.
+const valuePerSupplyBox = 75
+
+// supplyStartingBoxes is the default "StartingBoxes" from each supply object's
+// SupplyWarehouseDockUpdate module in inizh/Data/INI/Object/CivilianBuilding.ini.
+// A supply object's available cash = StartingBoxes * valuePerSupplyBox, unless a
+// map script overrides it via the "Set Warehouse Value" action (see scripts.go).
+var supplyStartingBoxes = map[string]int{
+	"SupplyWarehouse": 400,
+	"SupplyDock":      400,
+	"SupplyPile":      150,
+	"SupplyPileSmall": 50,
+	"ToxinRepository": 400,
+}
+
+// defaultSupplyAmount returns the INI-derived available cash for a supply object
+// template, and whether the template is known.
+func defaultSupplyAmount(templateName string) (int, bool) {
+	boxes, ok := supplyStartingBoxes[templateName]
+	if !ok {
+		return 0, false
+	}
+	return boxes * valuePerSupplyBox, true
+}
+
 // Tech building objects (KINDOF_TECH_BUILDING).
 // From inizh/Data/INI/Object/TechBuildings.ini and CivilianBuilding.ini
 var techNames = map[string]bool{

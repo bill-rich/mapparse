@@ -47,6 +47,10 @@ type MapObject struct {
 	WaypointID   int32
 	WaypointName string
 	PlayerNumber int // 1-based, 0 if not a player start
+
+	// EditorName is the map-editor-assigned unit name (dict key "objectName").
+	// Scripts reference objects by this name (e.g. "Set Warehouse Value").
+	EditorName string
 }
 
 // ParseObject reads a single Object chunk payload.
@@ -98,6 +102,13 @@ func ParseObject(data []byte, version uint16, tbl SymbolTable) (*MapObject, erro
 		Angle: angle,
 		Flags: flags,
 		Dict:  dict,
+	}
+
+	for _, e := range dict {
+		if e.Key == "objectName" && (e.Type == DictAscii || e.Type == DictUnicode) {
+			obj.EditorName = e.StringVal
+			break
+		}
 	}
 
 	classifyObject(obj)

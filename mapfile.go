@@ -16,6 +16,10 @@ type MapData struct {
 	ExtentY    float64 // world-space height
 	Objects    []*MapObject
 	WorldDict  []DictEntry // entries from the WorldInfo chunk
+
+	// SupplyOverrides maps a supply object's editor name to a cash value set at
+	// game start by a "Set Warehouse Value" script (see scripts.go).
+	SupplyOverrides map[string]int
 }
 
 // ParseMap reads and parses a C&C Generals .map file.
@@ -62,6 +66,12 @@ func ParseMap(filename string) (*MapData, error) {
 		case "WorldInfo":
 			if err := parseWorldInfo(chunk, tbl, md); err != nil {
 				return nil, fmt.Errorf("WorldInfo: %w", err)
+			}
+		case "SidesList":
+			// Scripts (and thus supply overrides) are best-effort; a parse
+			// surprise must not break core object output.
+			if err := parseSidesList(chunk, tbl, md); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: SidesList scripts: %v\n", err)
 			}
 		}
 		// Skip BlendTileData, GlobalLighting, etc.

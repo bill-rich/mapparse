@@ -113,6 +113,10 @@ func NewBinReader(data []byte) *BinReader {
 
 func (r *BinReader) Remaining() int { return len(r.data) - r.pos }
 
+// Rest returns the unread remainder of the underlying data. Used to hand the
+// nested-chunk tail of a chunk payload (after its fixed fields) to a ChunkReader.
+func (r *BinReader) Rest() []byte { return r.data[r.pos:] }
+
 func (r *BinReader) ReadByte() (byte, error) {
 	if r.pos+1 > len(r.data) {
 		return 0, errors.New("binreader: read past end")

@@ -66,6 +66,10 @@ type jsonPosition struct {
 	PlayerNumber int     `json:"player_number,omitempty"`
 	X            float32 `json:"x"`
 	Y            float32 `json:"y"`
+	// Amount is the available supply cash (supply objects only). Overridden is
+	// true when a start-of-game script set the value instead of the INI default.
+	Amount     int  `json:"amount,omitempty"`
+	Overridden bool `json:"overridden,omitempty"`
 }
 
 type jsonWaypoint struct {
@@ -131,7 +135,8 @@ func outputSummary(md *MapData, asJSON bool, verbose bool) {
 			out.PlayerStarts = append(out.PlayerStarts, jsonPosition{PlayerNumber: s.PlayerNumber, X: s.X, Y: s.Y})
 		}
 		for _, s := range supply {
-			out.Supply = append(out.Supply, jsonPosition{Name: s.Name, X: s.X, Y: s.Y})
+			amount, overridden, _ := resolveSupplyAmount(md, s)
+			out.Supply = append(out.Supply, jsonPosition{Name: s.Name, X: s.X, Y: s.Y, Amount: amount, Overridden: overridden})
 		}
 		for _, s := range tech {
 			out.Tech = append(out.Tech, jsonPosition{Name: s.Name, X: s.X, Y: s.Y})
@@ -166,7 +171,15 @@ func outputSummary(md *MapData, asJSON bool, verbose bool) {
 
 	fmt.Printf("Supply positions (%d):\n", len(supply))
 	for _, s := range supply {
-		fmt.Printf("  %s: (%.1f, %.1f)\n", s.Name, s.X, s.Y)
+		amount, overridden, known := resolveSupplyAmount(md, s)
+		switch {
+		case overridden:
+			fmt.Printf("  %s: (%.1f, %.1f) amount=%d (script override)\n", s.Name, s.X, s.Y, amount)
+		case known:
+			fmt.Printf("  %s: (%.1f, %.1f) amount=%d\n", s.Name, s.X, s.Y, amount)
+		default:
+			fmt.Printf("  %s: (%.1f, %.1f) amount=unknown\n", s.Name, s.X, s.Y)
+		}
 	}
 	fmt.Println()
 
@@ -197,6 +210,22 @@ func outputSummary(md *MapData, asJSON bool, verbose bool) {
 				o.Name, o.X, o.Y, o.Z, o.Angle, o.Flags)
 		}
 	}
+}
+
+// resolveSupplyAmount returns the available cash for a supply object. A
+// start-of-game script override (keyed by editor name) wins over the INI
+// default (StartingBoxes * valuePerSupplyBox). known is false when neither a
+// script value nor a known template default applies.
+func resolveSupplyAmount(md *MapData, obj *MapObject) (amount int, overridden bool, known bool) {
+	if obj.EditorName != "" {
+		if cash, ok := md.SupplyOverrides[obj.EditorName]; ok {
+			return cash, true, true
+		}
+	}
+	if def, ok := defaultSupplyAmount(obj.Name); ok {
+		return def, false, true
+	}
+	return 0, false, false
 }
 
 func outputDump(md *MapData, asJSON bool) {
