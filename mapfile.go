@@ -20,6 +20,18 @@ type MapData struct {
 	// SupplyOverrides maps a supply object's editor name to a cash value set at
 	// game start by a "Set Warehouse Value" script (see scripts.go).
 	SupplyOverrides map[string]int
+
+	// Heights is the raw heightmap (Width*Height bytes, row-major); world
+	// height = raw * mapHeightScale. See pathdist.go for the consumers.
+	Heights []byte
+
+	// WaterAreas are the water polygon triggers; LegacyDefaultWater marks
+	// version-1 maps that imply a global water plane at z=7.
+	WaterAreas         []WaterArea
+	LegacyDefaultWater bool
+
+	// Bridges are walkable spans derived from bridge map objects.
+	Bridges []BridgeSpan
 }
 
 // ParseMap reads and parses a C&C Generals .map file.
@@ -73,9 +85,16 @@ func ParseMap(filename string) (*MapData, error) {
 			if err := parseSidesList(chunk, tbl, md); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: SidesList scripts: %v\n", err)
 			}
+		case "PolygonTriggers":
+			// Water areas feed the passability grid; best-effort like scripts.
+			if err := parsePolygonTriggers(chunk, md); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: PolygonTriggers: %v\n", err)
+			}
 		}
 		// Skip BlendTileData, GlobalLighting, etc.
 	}
+
+	deriveBridges(md)
 
 	// Compute map extent
 	mapDX := md.Width - 2*md.BorderSize
@@ -123,6 +142,34 @@ func parseHeightMap(chunk *Chunk, md *MapData) error {
 				return fmt.Errorf("boundary y: %w", err)
 			}
 		}
+	}
+
+	// Height data proper (matches the engine's ParseSizeOnly in MapUtil.cpp,
+	// which despite the name reads the full array).
+	dataSize, err := r.ReadInt32()
+	if err != nil {
+		return fmt.Errorf("dataSize: %w", err)
+	}
+	if dataSize <= 0 || dataSize != width*height || int(dataSize) > r.Remaining() {
+		return fmt.Errorf("bad height data size %d for %dx%d grid", dataSize, width, height)
+	}
+	md.Heights = make([]byte, dataSize)
+	copy(md.Heights, r.Rest()[:dataSize])
+
+	if chunk.Version == 1 {
+		// Version-1 maps store the grid at double resolution; keep every
+		// other sample (same as the engine).
+		newWidth := (width + 1) / 2
+		newHeight := (height + 1) / 2
+		resized := make([]byte, newWidth*newHeight)
+		for y := int32(0); y < newHeight; y++ {
+			for x := int32(0); x < newWidth; x++ {
+				resized[y*newWidth+x] = md.Heights[2*y*width+2*x]
+			}
+		}
+		md.Width = newWidth
+		md.Height = newHeight
+		md.Heights = resized
 	}
 
 	return nil

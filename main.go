@@ -17,6 +17,14 @@ func main() {
 		return
 	}
 
+	if len(os.Args) > 1 && os.Args[1] == "passability" {
+		if err := runPassability(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	dump := flag.Bool("dump", false, "Dump ALL objects (for discovering template names)")
 	jsonOut := flag.Bool("json", false, "Output as JSON")
 	verbose := flag.Bool("verbose", false, "Include unclassified objects")
@@ -44,13 +52,32 @@ func main() {
 // JSON output types
 
 type jsonOutput struct {
-	Extent       extent            `json:"extent"`
-	PlayerStarts []jsonPosition    `json:"player_starts"`
-	Supply       []jsonPosition    `json:"supply"`
-	Tech         []jsonPosition    `json:"tech"`
-	Garrison     []jsonPosition    `json:"garrison"`
-	Waypoints    []jsonWaypoint    `json:"waypoints,omitempty"`
-	Other        []jsonObject      `json:"other,omitempty"`
+	Extent        extent         `json:"extent"`
+	PlayerStarts  []jsonPosition `json:"player_starts"`
+	Supply        []jsonPosition `json:"supply"`
+	Tech          []jsonPosition `json:"tech"`
+	Garrison      []jsonPosition `json:"garrison"`
+	Bridges       []jsonBridge   `json:"bridges,omitempty"`
+	PathDistances []jsonPathDist `json:"path_distances,omitempty"`
+	Waypoints     []jsonWaypoint `json:"waypoints,omitempty"`
+	Other         []jsonObject   `json:"other,omitempty"`
+}
+
+type jsonBridge struct {
+	Name     string  `json:"name"`
+	FromX    float32 `json:"from_x"`
+	FromY    float32 `json:"from_y"`
+	ToX      float32 `json:"to_x"`
+	ToY      float32 `json:"to_y"`
+	Landmark bool    `json:"landmark,omitempty"`
+}
+
+type jsonPathDist struct {
+	FromPlayer       int     `json:"from_player"`
+	ToPlayer         int     `json:"to_player"`
+	PathDistance     float64 `json:"path_distance"`
+	StraightDistance float64 `json:"straight_distance"`
+	Connected        bool    `json:"connected"`
 }
 
 type extent struct {
@@ -144,6 +171,18 @@ func outputSummary(md *MapData, asJSON bool, verbose bool) {
 		for _, g := range garrison {
 			out.Garrison = append(out.Garrison, jsonPosition{Name: g.Name, X: g.X, Y: g.Y})
 		}
+		for _, b := range md.Bridges {
+			out.Bridges = append(out.Bridges, jsonBridge{Name: b.Name, FromX: b.FromX, FromY: b.FromY, ToX: b.ToX, ToY: b.ToY, Landmark: b.Landmark})
+		}
+		for _, p := range ComputePathDistances(md) {
+			out.PathDistances = append(out.PathDistances, jsonPathDist{
+				FromPlayer:       p.FromPlayer,
+				ToPlayer:         p.ToPlayer,
+				PathDistance:     p.PathDistance,
+				StraightDistance: p.StraightDistance,
+				Connected:        p.Connected,
+			})
+		}
 		for _, w := range waypoints {
 			out.Waypoints = append(out.Waypoints, jsonWaypoint{Name: w.WaypointName, X: w.X, Y: w.Y})
 		}
@@ -192,6 +231,31 @@ func outputSummary(md *MapData, asJSON bool, verbose bool) {
 	fmt.Printf("Garrisonable buildings (%d):\n", len(garrison))
 	for _, g := range garrison {
 		fmt.Printf("  %s: (%.1f, %.1f)\n", g.Name, g.X, g.Y)
+	}
+
+	if len(md.Bridges) > 0 {
+		fmt.Println()
+		fmt.Printf("Bridges (%d):\n", len(md.Bridges))
+		for _, b := range md.Bridges {
+			kind := "sectional"
+			if b.Landmark {
+				kind = "landmark, span approximated"
+			}
+			fmt.Printf("  %s: (%.1f, %.1f) -> (%.1f, %.1f) [%s]\n", b.Name, b.FromX, b.FromY, b.ToX, b.ToY, kind)
+		}
+	}
+
+	if pairs := ComputePathDistances(md); len(pairs) > 0 {
+		fmt.Println()
+		fmt.Printf("Ground-path distances between starts:\n")
+		for _, p := range pairs {
+			note := ""
+			if !p.Connected {
+				note = "  DISCONNECTED"
+			}
+			fmt.Printf("  player %d <-> %d: path=%.0f straight=%.0f (x%.2f)%s\n",
+				p.FromPlayer, p.ToPlayer, p.PathDistance, p.StraightDistance, p.PathDistance/p.StraightDistance, note)
+		}
 	}
 
 	if len(waypoints) > 0 {
